@@ -35,7 +35,7 @@ Future use of this command is expected to be **recursive**: a spawned Claude ses
 ### 1. Pre-flight
 
 - Check that the target binary exists with `which claude`, `which gemini`, or `which codex`. If missing, stop and tell the user.
-- Session name is fixed: `selftalk`. If a session with that name already exists (`tmux has-session -t selftalk 2>/dev/null`), kill it first.
+- Generate a unique session name: `SESSION_NAME="selftalk_$(date +%s)"`
 - Working dir: `/tmp/selftalk` (create if absent). Neutral so the spawned CLI doesn't load unrelated project context.
 
 ### 2. Smart-route (only if `-e` is set)
@@ -43,15 +43,16 @@ Future use of this command is expected to be **recursive**: a spawned Claude ses
 Before spawning the user's chosen target, probe Claude usage:
 
 ```bash
-tmux new-session -d -s selftalk_probe -x 200 -y 50 -c /tmp/selftalk 'claude --dangerously-skip-permissions'
+PROBE_SESSION="selftalk_probe_$(date +%s)"
+tmux new-session -d -s $PROBE_SESSION -x 200 -y 50 -c /tmp/selftalk 'claude --dangerously-skip-permissions'
 sleep 3
 # Dismiss any trust prompt (option 1 pre-selected)
-tmux send-keys -t selftalk_probe Enter
+tmux send-keys -t $PROBE_SESSION Enter
 sleep 2
-tmux send-keys -t selftalk_probe "/usage" Enter
+tmux send-keys -t $PROBE_SESSION "/usage" Enter
 sleep 4
-tmux capture-pane -t selftalk_probe -p > /tmp/selftalk_probe.out
-tmux kill-session -t selftalk_probe
+tmux capture-pane -t $PROBE_SESSION -p > /tmp/selftalk_probe.out
+tmux kill-session -t $PROBE_SESSION
 ```
 
 Parse `/tmp/selftalk_probe.out` for the **"Current session"** line — it looks like `███... NN% used`. Extract the percentage.
@@ -64,22 +65,24 @@ If `/usage` output is unparseable (TUI didn't render in time, network hiccup, et
 ### 3. Spawn (with permissions bypassed)
 
 ```bash
+SESSION_NAME="selftalk_$(date +%s)"
+
 # Claude
-tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'claude --dangerously-skip-permissions'
-tmux set-option -t selftalk mouse on
+tmux new-session -d -s $SESSION_NAME -x 200 -y 50 -c /tmp/selftalk 'claude --dangerously-skip-permissions'
+tmux set-option -t $SESSION_NAME mouse on
 
 # Gemini
-tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'gemini -y --skip-trust'
-tmux set-option -t selftalk mouse on
+tmux new-session -d -s $SESSION_NAME -x 200 -y 50 -c /tmp/selftalk 'gemini -y --skip-trust'
+tmux set-option -t $SESSION_NAME mouse on
 
 # Codex
-tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'codex --dangerously-bypass-approvals-and-sandbox'
-tmux set-option -t selftalk mouse on
+tmux new-session -d -s $SESSION_NAME -x 200 -y 50 -c /tmp/selftalk 'codex --dangerously-bypass-approvals-and-sandbox'
+tmux set-option -t $SESSION_NAME mouse on
 ```
 
 The `--dangerously-skip-permissions` / `-y --skip-trust` / `--dangerously-bypass-approvals-and-sandbox` flags are *required*, not optional — without them, each shell call inside the spawned CLI pops a permission dialog that this driving session can't easily click through. We learned this the hard way; do not strip the flags to be "safe."
 
-Wait ~3 s for the CLI to come up, then `tmux capture-pane -t selftalk -p -S - -E -` to see initial state.
+Wait ~3 s for the CLI to come up, then `tmux capture-pane -t $SESSION_NAME -p -S - -E -` to see initial state.
 
 ### 4. Handle first-run prompts
 
@@ -93,20 +96,20 @@ Even with the bypass flags, the workspace-trust prompt still appears on first us
 
 Verbatim:
 
-> Session up. To watch live (read-only) open a terminal and run: `tmux attach -r -t selftalk` — detach with `Ctrl-b d`.
+> Session up. To watch live (read-only) open a terminal and run: `tmux attach -r -t <SESSION_NAME>` — detach with `Ctrl-b d`.
 
 ### 6. Drive the session
 
-**Always** use `tmux load-buffer` / `tmux paste-buffer` for every prompt — even single words or short moves. Never use `tmux send-keys -t SESSION "text" Enter` as a combined call: both Claude and Gemini CLI treat the Enter in that form as a newline inside the input box, not a submission. The standalone `tmux send-keys -t SESSION Enter` that follows is what actually submits. Pattern:
+**Always** use `tmux load-buffer` / `tmux paste-buffer` for every prompt — even single words or short moves. Never use `tmux send-keys -t $SESSION_NAME "text" Enter` as a combined call: both Claude and Gemini CLI treat the Enter in that form as a newline inside the input box, not a submission. The standalone `tmux send-keys -t $SESSION_NAME Enter` that follows is what actually submits. Pattern:
 
 ```bash
 cat > /tmp/selftalk_prompt.txt <<'EOF'
 <prompt body here>
 EOF
-tmux load-buffer -t selftalk /tmp/selftalk_prompt.txt
-tmux paste-buffer -t selftalk
+tmux load-buffer -t $SESSION_NAME /tmp/selftalk_prompt.txt
+tmux paste-buffer -t $SESSION_NAME
 sleep 1
-tmux send-keys -t selftalk Enter
+tmux send-keys -t $SESSION_NAME Enter
 ```
 
 Then poll for idle using a background until-loop. The busy indicator differs by CLI:
@@ -116,12 +119,12 @@ Then poll for idle using a background until-loop. The busy indicator differs by 
 
 ```bash
 # Claude / Gemini
-until ! tmux capture-pane -t selftalk -p | grep -qE "esc to cancel"; do sleep 3; done
-echo "IDLE"; tmux capture-pane -t selftalk -p | tail -60
+until ! tmux capture-pane -t $SESSION_NAME -p | grep -qE "esc to cancel"; do sleep 3; done
+echo "IDLE"; tmux capture-pane -t $SESSION_NAME -p | tail -60
 
 # Codex
-until ! tmux capture-pane -t selftalk -p | grep -qE "esc to interrupt"; do sleep 3; done
-echo "IDLE"; tmux capture-pane -t selftalk -p | tail -60
+until ! tmux capture-pane -t $SESSION_NAME -p | grep -qE "esc to interrupt"; do sleep 3; done
+echo "IDLE"; tmux capture-pane -t $SESSION_NAME -p | tail -60
 ```
 
 Run that in the background with `run_in_background: true`; you'll get a notification when the spawn goes idle. Do not chain manual `sleep` calls — they're blocked beyond a small budget.
@@ -129,11 +132,11 @@ Run that in the background with `run_in_background: true`; you'll get a notifica
 ### 7. Teardown
 
 ```bash
-tmux send-keys -t selftalk Escape
+tmux send-keys -t $SESSION_NAME Escape
 sleep 1
-tmux send-keys -t selftalk "/quit" Enter
+tmux send-keys -t $SESSION_NAME "/quit" Enter
 sleep 2
-tmux kill-session -t selftalk 2>/dev/null
+tmux kill-session -t $SESSION_NAME 2>/dev/null
 ```
 
 Confirm with `tmux list-sessions 2>&1` ("no server running" if selftalk was the only one).
