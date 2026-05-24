@@ -75,12 +75,15 @@ Parse `/tmp/selftalk_probe.out` for the "Current session" line (looks like `... 
 ```bash
 # Claude
 tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'claude --dangerously-skip-permissions'
+tmux set-option -t selftalk mouse on
 
 # Gemini
 tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'gemini -y --skip-trust'
+tmux set-option -t selftalk mouse on
 
 # Codex
 tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'codex --dangerously-bypass-approvals-and-sandbox'
+tmux set-option -t selftalk mouse on
 ```
 
 The bypass flags are required; without them, each shell call inside the spawned CLI triggers a permission dialog that this driving session can't reliably handle.

@@ -66,12 +66,15 @@ If `/usage` output is unparseable (TUI didn't render in time, network hiccup, et
 ```bash
 # Claude
 tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'claude --dangerously-skip-permissions'
+tmux set-option -t selftalk mouse on
 
 # Gemini
 tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'gemini -y --skip-trust'
+tmux set-option -t selftalk mouse on
 
 # Codex
 tmux new-session -d -s selftalk -x 200 -y 50 -c /tmp/selftalk 'codex --dangerously-bypass-approvals-and-sandbox'
+tmux set-option -t selftalk mouse on
 ```
 
 The `--dangerously-skip-permissions` / `-y --skip-trust` / `--dangerously-bypass-approvals-and-sandbox` flags are *required*, not optional — without them, each shell call inside the spawned CLI pops a permission dialog that this driving session can't easily click through. We learned this the hard way; do not strip the flags to be "safe."

@@ -54,9 +54,11 @@ If unparseable, default to Claude and say the probe was inconclusive. Do not sil
 ```bash
 # Claude
 tmux new-session -d -s selftalk_g -x 200 -y 50 -c /tmp/selftalk_g 'claude --dangerously-skip-permissions'
+tmux set-option -t selftalk_g mouse on
 
 # Gemini
 tmux new-session -d -s selftalk_g -x 200 -y 50 -c /tmp/selftalk_g 'gemini -y --skip-trust'
+tmux set-option -t selftalk_g mouse on
 ```
 
 The bypass flags are required, not optional — without them every shell call inside the spawn pops a permission dialog this driving session can't click through. Do not strip them "to be safe."
