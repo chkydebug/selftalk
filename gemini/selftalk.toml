@@ -1,0 +1,113 @@
+description = "Spawn a Claude or Gemini CLI in a tmux session so the user can watch read-only while I drive it."
+prompt = """
+The user has invoked `/selftalk` to drive another Claude or Gemini CLI in a detached tmux session, with read-only spectator access for themselves.
+
+## Argument parsing
+
+The raw arguments are: {{args}}
+
+Flags may appear in any order.
+
+- `-c` → target is `claude` (Claude Code CLI)
+- `-g` → target is `gemini` (Google Gemini CLI)
+- `-e` → **enable smart-route**: before spawning, probe Claude's `/usage`; if Claude's current-session % is >80, spawn Gemini instead. Asymmetric — only Claude→Gemini fallback; Gemini→Claude is not implemented.
+- Anything after the flags (quoted or unquoted) is an initial prompt to send to the spawned CLI. Optional.
+- If no target flag and no `-e`, stop and ask — do not guess.
+- If `-e` is passed with no target flag, treat target preference as `-c`.
+
+## Recursive use — intentional, no guardrails
+
+Future use of this command is expected to be recursive: a spawned Gemini session may itself invoke `/selftalk` to drive another CLI, which may in turn spawn another. Do NOT add anti-recursion checks (PID-depth limits, parent-session sniffing, refuse-if-spawned-by-selftalk heuristics) unless the user explicitly asks. The fixed session name (`selftalk_g`) means a child invocation collides with the parent; that's a feature for now — the child kills and replaces, which keeps state observable.
+
+## What to do
+
+### 1. Pre-flight
+
+- Check that the target binary exists (`which claude` / `which gemini`); stop with an error if not.
+- Session name is fixed: `selftalk_g` (the `_g` suffix avoids collision with the Claude-side skill which uses `selftalk`). If it already exists (`tmux has-session -t selftalk_g 2>/dev/null`), kill it first.
+- Working dir: `/tmp/selftalk_g` (create if absent).
+
+### 2. Smart-route (only if `-e` is set)
+
+Probe Claude usage before spawning:
+
+```bash
+tmux new-session -d -s selftalk_g_probe -x 200 -y 50 -c /tmp/selftalk_g 'claude --dangerously-skip-permissions'
+sleep 3
+tmux send-keys -t selftalk_g_probe Enter   # accept trust prompt
+sleep 2
+tmux send-keys -t selftalk_g_probe "/usage" Enter
+sleep 4
+tmux capture-pane -t selftalk_g_probe -p > /tmp/selftalk_g_probe.out
+tmux kill-session -t selftalk_g_probe
+```
+
+Parse `/tmp/selftalk_g_probe.out` for the "Current session NN% used" line.
+
+- If session % > 80 → effective target = `gemini`. Tell user "Smart-route: Claude session at NN% — routing to Gemini."
+- Else → effective target = `claude`. Tell user "Smart-route: Claude session at NN% — using Claude."
+
+If unparseable, default to Claude and say the probe was inconclusive. Do not silently flip.
+
+### 3. Spawn (with permissions bypassed)
+
+```bash
+# Claude
+tmux new-session -d -s selftalk_g -x 200 -y 50 -c /tmp/selftalk_g 'claude --dangerously-skip-permissions'
+
+# Gemini
+tmux new-session -d -s selftalk_g -x 200 -y 50 -c /tmp/selftalk_g 'gemini -y --skip-trust'
+```
+
+The bypass flags are required, not optional — without them every shell call inside the spawn pops a permission dialog this driving session can't click through. Do not strip them "to be safe."
+
+Wait ~3 s, then `tmux capture-pane -t selftalk_g -p` to verify it started.
+
+### 4. Handle first-run prompts
+
+Even with bypass flags, the workspace-trust prompt still appears on first use of a new dir.
+
+- Claude: option 1 pre-selected. Send `Enter`.
+- Gemini: option 1 pre-selected. Send `Enter`.
+
+### 5. Report the attach command verbatim
+
+> Session up. To watch live (read-only) open a terminal and run: `tmux attach -r -t selftalk_g` — detach with `Ctrl-b d`.
+
+### 6. Drive the session
+
+**Always** use `tmux load-buffer` / `tmux paste-buffer` for every prompt — even single words or short moves. Never use `tmux send-keys -t SESSION "text" Enter` as a combined call: both Claude and Gemini CLI treat the Enter in that form as a newline inside the input box, not a submission. The standalone `tmux send-keys -t SESSION Enter` that follows is what actually submits.
+
+```bash
+cat > /tmp/selftalk_g_prompt.txt <<'EOF'
+<prompt body>
+EOF
+tmux load-buffer -t selftalk_g /tmp/selftalk_g_prompt.txt
+tmux paste-buffer -t selftalk_g
+sleep 1
+tmux send-keys -t selftalk_g Enter
+sleep 4
+tmux capture-pane -t selftalk_g -p
+```
+
+### 7. Teardown
+
+```bash
+tmux send-keys -t selftalk_g Escape
+sleep 1
+tmux send-keys -t selftalk_g "/quit" Enter
+sleep 2
+tmux kill-session -t selftalk_g 2>/dev/null
+```
+
+## Cost warning
+
+A spawned Claude session draws on the user's Claude quota; Gemini draws on Gemini's free-tier quota. The `-e` smart-route probe spawns a temp Claude session for `/usage` — cheap but not free. Mention this on first spawn in a conversation if not yet acknowledged.
+
+## Do NOT
+
+- Do not spawn more than one `selftalk_g` session in parallel.
+- Do not send destructive commands to the spawned CLI on the user's behalf — the spawn has Bash access to the whole filesystem and runs with permissions bypassed.
+- Do not strip the `--dangerously-skip-permissions` / `-y` flags — without them the spawn is unusable from this driving session.
+- Do not edit the spawned CLI's settings.json or any config — the spawn is ephemeral.
+"""
