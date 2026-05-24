@@ -35,7 +35,7 @@ Future use of this command is expected to be **recursive**: a spawned Claude ses
 ### 1. Pre-flight
 
 - Check that the target binary exists with `which claude`, `which gemini`, or `which codex`. If missing, stop and tell the user.
-- Generate a unique session name: `SESSION_NAME="selftalk_$(date +%s)"`
+- Generate a sequential session name (e.g. `selftalk_1`, `selftalk_2`)
 - Working dir: `/tmp/selftalk` (create if absent). Neutral so the spawned CLI doesn't load unrelated project context.
 
 ### 2. Smart-route (only if `-e` is set)
@@ -65,7 +65,11 @@ If `/usage` output is unparseable (TUI didn't render in time, network hiccup, et
 ### 3. Spawn (with permissions bypassed)
 
 ```bash
-SESSION_NAME="selftalk_$(date +%s)"
+i=1
+while tmux has-session -t "selftalk_$i" 2>/dev/null; do
+  i=$((i + 1))
+done
+SESSION_NAME="selftalk_$i"
 
 # Claude
 tmux new-session -d -s $SESSION_NAME -x 200 -y 50 -c /tmp/selftalk 'claude --dangerously-skip-permissions'
