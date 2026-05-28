@@ -79,9 +79,9 @@ cp SKILL.md ~/.codex/skills/selftalk/SKILL.md
 If you are installing from GitHub:
 
 ```bash
-git clone https://github.com/OWNER/REPO.git
+git clone https://github.com/chkydebug/selftalk.git
 mkdir -p ~/.codex/skills/selftalk
-cp REPO/SKILL.md ~/.codex/skills/selftalk/SKILL.md
+cp selftalk/SKILL.md ~/.codex/skills/selftalk/SKILL.md
 ```
 
 Restart Codex after installation so the new skill is picked up.
@@ -128,6 +128,12 @@ Detach with `Ctrl-b d`.
 - It avoids mutating agent configuration and treats the worker session as ephemeral.
 
 That makes the skill powerful, but it also means contributors should preserve clarity around cost, permissions, and routing behavior.
+
+## Origin
+
+This project was vibecoded with Claude Code. Literally — I was hitting Claude's usage limits, so I asked Claude to build me a workaround. The irony is intentional.
+
+The concept is solid. The implementation has rough edges. If you're a real developer and something bothers you about the code, please fix it — that's exactly why this is open source.
 
 ## Contributing
 
